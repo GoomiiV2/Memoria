@@ -2,7 +2,7 @@
 using Dalamud.Plugin;
 using System;
 
-namespace SamplePlugin;
+namespace Memoria;
 
 [Serializable]
 public class Configuration : IPluginConfiguration

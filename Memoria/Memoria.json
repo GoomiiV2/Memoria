@@ -1,0 +1,13 @@
+{
+  "Author": "GoomiiV2",
+  "Name": "Memoria",
+  "Punchline": "Auto record your pulls with OBS and a timeline.",
+  "Description": "Auto record your pulls with OBS and a timeline.",
+  "ApplicableVersion": "any",
+  "Tags": [
+    "Memoria",
+    "pull",
+    "record",
+    "logs"
+  ]
+}
