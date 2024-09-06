@@ -13,6 +13,7 @@ public class Configuration : IPluginConfiguration
     public bool SomePropertyToBeSavedAndWithADefault { get; set; } = true;
 
     public string PullSaveLocation { get; set; } = string.Empty;
+    public string OBSUrl { get; set; } = string.Empty;
 
     // the below exist just to make saving less cumbersome
     public void Save()

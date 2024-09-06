@@ -16,4 +16,8 @@
       <Visible>false</Visible>
     </Content>
   </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="obs-websocket-dotnet" Version="5.0.0.3" />
+  </ItemGroup>
 </Project>

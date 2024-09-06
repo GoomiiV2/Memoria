@@ -11,6 +11,7 @@ using System.Text;
 using System.Threading.Tasks;
 using static FFXIVClientStructs.FFXIV.Common.Component.BGCollision.MeshPCB;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
+using Dalamud.Game.ClientState.Conditions;
 
 namespace Memoria
 {
@@ -37,6 +38,7 @@ namespace Memoria
             Plugin.DutyState.DutyRecommenced    += OnDutyRecommenced;
             Plugin.ChatGui.ChatMessage          += ChatGui_ChatMessage;
             Plugin.ClientState.TerritoryChanged += OnTerritoryChanged;
+            Plugin.Condition.ConditionChange    += OnConditionChange;
 
             Plugin.AddonLifecycle.RegisterListener(AddonEvent.PostDraw, "_EnemyList", OnEnemyListPostDraw);
         }
@@ -49,6 +51,7 @@ namespace Memoria
             Plugin.DutyState.DutyRecommenced    -= OnDutyRecommenced;
             Plugin.ChatGui.ChatMessage          -= ChatGui_ChatMessage;
             Plugin.ClientState.TerritoryChanged -= OnTerritoryChanged;
+            Plugin.Condition.ConditionChange    -= OnConditionChange;
 
             Plugin.AddonLifecycle.UnregisterListener(OnEnemyListPostDraw);
         }
@@ -64,6 +67,12 @@ namespace Memoria
                     OnCountdownStarted();
                 }
             }
+            //else if (type == Dalamud.Game.Text.XivChatType.)
+            {
+
+            }
+
+            //Plugin.ClientState.LocalPlayer.
 
             Plugin.Log.Information($"{type} {message.TextValue} {sender.TextValue}");
         }
@@ -115,7 +124,7 @@ namespace Memoria
         {
             if (!HasCombatStarted)
             {
-                OnCombatStart();
+                //OnCombatStart();
                 HasCombatStarted = true;
             }
         }
@@ -129,10 +138,27 @@ namespace Memoria
             }
         }
 
+        private void OnCombatEnd()
+        {
+            Plugin.Log.Information("OnCombatEnd");
+        }
+
         private void OnEnteredZone()
         {
             PullNumber = 0;
             LockoutStartTime = DateTime.Now;
+        }
+
+        private void OnConditionChange(ConditionFlag flag, bool value)
+        {
+            Plugin.Log.Information($"OnConditionChange: {flag}: {value}");
+            if (flag == ConditionFlag.InCombat)
+            {
+                if (value)
+                    OnCombatStart();
+                else
+                    OnCombatEnd();
+            }
         }
 
         private void PullStart()
@@ -146,6 +172,7 @@ namespace Memoria
             }
 
             StartNewPullLog();
+            Plugin.OBSLink.StartRecording();
         }
 
         private void PullStop()
@@ -154,6 +181,7 @@ namespace Memoria
             SavePullLog();
             CurrentPull = null;
             HasCombatStarted = false;
+            Plugin.OBSLink.StopRecording();
         }
 
         private void StartNewPullLog()

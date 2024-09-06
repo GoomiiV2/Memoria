@@ -74,5 +74,12 @@ public class ConfigWindow : Window, IDisposable
                 }
             }, Configuration.PullSaveLocation);
         }
+
+        var obsUrl = Configuration.OBSUrl;
+        if (ImGui.InputText("OBS Url", ref obsUrl, 1000))
+        {
+            Configuration.OBSUrl = obsUrl;
+            Configuration.Save();
+        }
     }
 }

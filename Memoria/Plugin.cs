@@ -24,10 +24,12 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IClientState ClientState { get; private set; } = null!;
     [PluginService] internal static IPartyList PartyList { get; private set; } = null!;
     [PluginService] internal static IAddonLifecycle AddonLifecycle { get; private set; } = null!;
+    [PluginService] internal static ICondition Condition { get; private set; } = null!;
 
     internal static FileDialogManager FileDialogManager = new ();
 
     internal static PullLogger PullLogger = new();
+    internal static OBSLink OBSLink = new();
 
     public Configuration Configuration { get; init; }
 
@@ -60,6 +62,7 @@ public sealed class Plugin : IDalamudPlugin
 
         Data.Init();
         PullLogger.Init(Configuration);
+        OBSLink.Init(Configuration);
 
         Log.Information("Test");
     }
@@ -77,6 +80,7 @@ public sealed class Plugin : IDalamudPlugin
         }
 
         PullLogger.UnInit();
+        OBSLink.UnInit();
     }
 
     private void RegisterCommand(string command, CommandInfo commandInfo)
