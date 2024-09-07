@@ -161,27 +161,40 @@ namespace Memoria
             }
         }
 
-        private void PullStart()
+        private async void PullStart()
         {
             Plugin.Log.Information("PullStart");
 
             if (CurrentPull != null)
             {
                 // Save the pull incase
-                SavePullLog();
+                await PullStop(true);
+                await Task.Delay(TimeSpan.FromSeconds(1));
             }
 
             StartNewPullLog();
-            Plugin.OBSLink.StartRecording();
+            await Plugin.OBSLink.StartRecording();
         }
 
-        private void PullStop()
+        private async Task PullStop(bool forceStop = false)
         {
             Plugin.Log.Information("PullStop");
-            SavePullLog();
-            CurrentPull = null;
-            HasCombatStarted = false;
-            Plugin.OBSLink.StopRecording();
+
+            if (!forceStop)
+                await Task.Delay(TimeSpan.FromSeconds(Config.DelayAfterPullEndToStopRec));
+
+            var stopRecTask = Plugin.OBSLink.StopRecording();
+            var stopRecTimeout = Task.Delay(TimeSpan.FromSeconds(2));
+            await Task.WhenAny(stopRecTask, stopRecTimeout);
+
+            if (CurrentPull != null)
+            {
+                Plugin.Log.Information($"stopRecTask.IsCompleted: {stopRecTask.IsCompleted}");
+                CurrentPull.RecordingPath = stopRecTask.IsCompleted ? stopRecTask.Result : "";
+                SavePullLog();
+                CurrentPull = null;
+                HasCombatStarted = false;
+            }
         }
 
         private void StartNewPullLog()

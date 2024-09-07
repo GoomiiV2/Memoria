@@ -81,5 +81,12 @@ public class ConfigWindow : Window, IDisposable
             Configuration.OBSUrl = obsUrl;
             Configuration.Save();
         }
+
+        var recEndDelay = Configuration.DelayAfterPullEndToStopRec;
+        if (ImGui.SliderInt("Record X seconds after pull", ref recEndDelay, 0, 30) && recEndDelay != Configuration.DelayAfterPullEndToStopRec)
+        {
+            Configuration.DelayAfterPullEndToStopRec = recEndDelay;
+            Configuration.Save();
+        }
     }
 }

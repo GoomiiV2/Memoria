@@ -14,6 +14,7 @@ public class Configuration : IPluginConfiguration
 
     public string PullSaveLocation { get; set; } = string.Empty;
     public string OBSUrl { get; set; } = string.Empty;
+    public int DelayAfterPullEndToStopRec = 5;
 
     // the below exist just to make saving less cumbersome
     public void Save()

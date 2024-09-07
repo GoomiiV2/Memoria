@@ -1,11 +1,6 @@
-using FFXIVClientStructs.FFXIV.Client.UI.Agent;
-using OBSWebsocketDotNet;
-using OBSWebsocketDotNet.Communication;
+using OBSStudioClient;
+using OBSStudioClient.Events;
 using System;
-using System.Collections.Generic;
-using System.Linq;
-using System.Net.WebSockets;
-using System.Text;
 using System.Threading.Tasks;
 
 namespace Memoria
@@ -13,87 +8,46 @@ namespace Memoria
     internal class OBSLink
     {
         public Configuration configuration;
-        private OBSWebsocket OBSWebsocket; // this lib is kinda annoying :<
-        private bool ShouldStop = false;
-        private int FailedConnectionAttempts = 0;
-        private bool StartRecordingOnConnect = false;
-        private bool StopRecordingOnConnect = false;
+        private ObsClient ObsClient; // this lib is kinda annoying :<
+
+        public bool IsConnected => ObsClient != null && ObsClient.ConnectionState == OBSStudioClient.Enums.ConnectionState.Connected;
+        public bool IsRecording { get; private set; } = false;
 
         public void Init(Configuration config)
         {
-            configuration              = config;
-            OBSWebsocket               = new OBSWebsocket();
-            OBSWebsocket.Connected    += OnConnected;
-            OBSWebsocket.Disconnected += OnDisconnected;
-            ShouldStop = false;
+            configuration = config;
+            ObsClient = new ObsClient();
+            ObsClient.AutoReconnect = true;
+            ObsClient.ConnectionClosed += OnConnectionClosed;
+            ObsClient.RecordStateChanged += OnRecordStateChanged;
 
-            //Connect();
+            Connect();
         }
 
         public void UnInit()
         {
-            ShouldStop = true;
-
-            if (OBSWebsocket.IsConnected)
-                OBSWebsocket.Disconnect();
+            ObsClient.Disconnect();
         }
 
-        private void OnConnected(object? sender, EventArgs e)
+        private void OnConnectionClosed(object? sender, ConnectionClosedEventArgs e)
         {
-            Plugin.Log.Information("OnConnected");
-            FailedConnectionAttempts = 0;
-
-            if (StartRecordingOnConnect)
-            {
-                StartRecording();
-                StartRecordingOnConnect = false;
-            }
-
-            if (StopRecordingOnConnect)
-            {
-                StopRecording();
-                StopRecordingOnConnect = false ;
-            }
+            Plugin.Log.Debug($"OnConnectionClosed: {e}");
         }
 
-        private void OnDisconnected(object? sender, OBSWebsocketDotNet.Communication.ObsDisconnectionInfo e)
+        private void OnRecordStateChanged(object? sender, RecordStateChangedEventArgs e)
         {
-            Plugin.Log.Information("OnDisconnected");
-
-            if (ShouldStop)
-                return;
-
-            FailedConnectionAttempts++;
-
-            if (FailedConnectionAttempts > 8)
-            {
-                FailedConnectionAttempts = 0;
-                return;
-            }
-
-            Task.Factory.StartNew(async () =>
-            {
-                var reconnectDelay = 2 * (FailedConnectionAttempts * FailedConnectionAttempts);
-                Plugin.Log.Information($"reconnectDelay: {reconnectDelay}");
-
-                await Task.Delay(TimeSpan.FromSeconds(reconnectDelay));
-                Connect();
-            });
+            Plugin.Log.Debug($"OnRecordStateChanged: {e}");
+            IsRecording = e.OutputActive;
         }
 
-        public void StartRecording()
+        public async Task StartRecording()
         {
             try
             {
-                if (!OBSWebsocket.IsConnected)
-                {
-                    StartRecordingOnConnect = true;
-                    Connect(true);
-                }
-                else
-                {
-                    OBSWebsocket.StartRecord();
-                }
+                if (!IsConnected)
+                    await Connect();
+
+                await ObsClient.StartRecord();
             }
             catch (Exception ex)
             {
@@ -101,22 +55,14 @@ namespace Memoria
             }
         }
 
-        public string StopRecording()
+        public async Task<string> StopRecording()
         {
             try
             {
-                StartRecordingOnConnect = false;
+                if (!IsConnected)
+                    await Connect();
 
-                if (!OBSWebsocket.IsConnected)
-                {
-                    Connect(true);
-                    StopRecordingOnConnect = true;
-                    return null; // Can't get the file path now yay :<
-                }
-                else
-                {
-                    return OBSWebsocket.StopRecord();
-                }
+                return await ObsClient.StopRecord();
             }
             catch (Exception ex)
             {
@@ -126,31 +72,23 @@ namespace Memoria
             return null;
         }
 
-        private void Connect(bool freshAttempt = false)
+        private async Task<bool> Connect(bool freshAttempt = false)
         {
             try
             {
                 Plugin.Log.Information("Connect");
 
-                if (OBSWebsocket.IsConnected)
-                    return;
+                var url = new Uri(configuration.OBSUrl);
+                Plugin.Log.Information($"url.Host: {url.Host}");
 
-                //if (freshAttempt)
-                    //FailedConnectionAttempts = 0;
-
-                OBSWebsocket.ConnectAsync(configuration.OBSUrl, null);
+                return await ObsClient.ConnectAsync(true, "", url.Host, url.Port);
             }
             catch (Exception ex)
             {
                 Plugin.Log.Information($"Connect Error: {ex.Message}");
             }
-        }
 
-        public enum PendingAction
-        {
-            None,
-            StartRecording,
-            StopRecording
+            return false;
         }
     }
 }
