@@ -12,12 +12,13 @@ using System.Threading.Tasks;
 using static FFXIVClientStructs.FFXIV.Common.Component.BGCollision.MeshPCB;
 using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 using Dalamud.Game.ClientState.Conditions;
+using Newtonsoft.Json.Converters;
 
 namespace Memoria
 {
     internal class PullLogger
     {
-        private Configuration? Config { get; set; }
+        private Configuration Config { get; set; } = new ();
 
         private PullLog? CurrentPull = null;
         private int PullNumber = 0;
@@ -28,6 +29,9 @@ namespace Memoria
         {
             this.Config = Config;
             RegisterEvents();
+
+            //Data.DumpContentFinderConditions("I:\\Recordings\\UWU\\ContentFinderConditions.txt");
+            //Data.DumpChatChannels("I:\\Recordings\\UWU\\DumpChatChannels.txt");
         }
 
         private void RegisterEvents()
@@ -58,21 +62,24 @@ namespace Memoria
 
         private void ChatGui_ChatMessage(Dalamud.Game.Text.XivChatType type, int timestamp, ref Dalamud.Game.Text.SeStringHandling.SeString sender, ref Dalamud.Game.Text.SeStringHandling.SeString message, ref bool isHandled)
         {
-            if (type == (Dalamud.Game.Text.XivChatType)185) // Countdown start seems to be 185, not system message
+            if ((int)type is 185 or 569) // Countdown start seems to be 185 or 569, not system message
             {
                 if (Data.CountdownStartStrings.TryGetValue(Plugin.PluginInterface.UiLanguage, out var battleStartLine)
                     && message.TextValue.StartsWith(battleStartLine) && message.TextValue.EndsWith(")"))
                 {
-                    Plugin.Log.Information($"");
                     OnCountdownStarted();
                 }
+                else if (Data.CountdownCanceledStrings.TryGetValue(Plugin.PluginInterface.UiLanguage, out var battleCanceledLine)
+                    && message.TextValue.StartsWith(battleCanceledLine))
+                {
+                    OnCountdownCanceled();
+                }
+                else if (Data.CountdownEndStrings.TryGetValue(Plugin.PluginInterface.UiLanguage, out var battleCommenceLine)
+                    && message.TextValue.StartsWith(battleCommenceLine))
+                {
+                    OnCountdownFinsihed();
+                }
             }
-            //else if (type == Dalamud.Game.Text.XivChatType.)
-            {
-
-            }
-
-            //Plugin.ClientState.LocalPlayer.
 
             Plugin.Log.Information($"{type} {message.TextValue} {sender.TextValue}");
         }
@@ -90,12 +97,13 @@ namespace Memoria
         private void OnDutyCompleted(object? sender, ushort e)
         {
             Plugin.Log.Information("DutyState_DutyCompleted");
+            PullStop(PullState.Cleared);
         }
 
         private void OnDutyWiped(object? sender, ushort e)
         {
             Plugin.Log.Information("DutyState_DutyWiped");
-            PullStop();
+            PullStop(PullState.Wiped);
         }
 
         private void OnCountdownStarted()
@@ -112,6 +120,7 @@ namespace Memoria
         private void OnCountdownCanceled()
         {
             Plugin.Log.Information("CountdownCanceled");
+            PullStop(PullState.Canceled, true);
         }
 
         private void OnTerritoryChanged(ushort obj)
@@ -161,14 +170,35 @@ namespace Memoria
             }
         }
 
+        private bool ShouldRecord()
+        {
+            var contentId = Data.GetContentTypeIdForZone();
+            Plugin.Log.Information($"{contentId}");
+            if ((contentId == ContentTypeId.Trial && Config.RecInNormTrials) ||
+                (contentId == ContentTypeId.ExTrial && Config.RecInExTrials) ||
+                (contentId == ContentTypeId.Raid && Config.RecInNormRaids) ||
+                (contentId == ContentTypeId.SavageRaid && Config.RecInSavageRaids) ||
+                (contentId == ContentTypeId.Ultimate && Config.RecInUltimates))
+            {
+                return true;
+            }
+            else
+            {
+                return false;
+            }
+        }
+
         private async void PullStart()
         {
+            if (!ShouldRecord())
+                return;
+
             Plugin.Log.Information("PullStart");
 
             if (CurrentPull != null)
             {
                 // Save the pull incase
-                await PullStop(true);
+                await PullStop(PullState.Unknown, true);
                 await Task.Delay(TimeSpan.FromSeconds(1));
             }
 
@@ -176,8 +206,11 @@ namespace Memoria
             await Plugin.OBSLink.StartRecording();
         }
 
-        private async Task PullStop(bool forceStop = false)
+        private async Task PullStop(PullState pullState, bool forceStop = false)
         {
+            if (!ShouldRecord())
+                return;
+
             Plugin.Log.Information("PullStop");
 
             if (!forceStop)
@@ -189,8 +222,12 @@ namespace Memoria
 
             if (CurrentPull != null)
             {
-                Plugin.Log.Information($"stopRecTask.IsCompleted: {stopRecTask.IsCompleted}");
-                CurrentPull.RecordingPath = stopRecTask.IsCompleted ? stopRecTask.Result : "";
+                if (stopRecTask.IsCompleted)
+                {
+                    CurrentPull.RecordingPath = MoveAndRenameRecording(stopRecTask.Result);
+                }
+                CurrentPull.PullState = pullState;
+                CurrentPull.PullLength = DateTime.Now - CurrentPull.PullStartTime;
                 SavePullLog();
                 CurrentPull = null;
                 HasCombatStarted = false;
@@ -217,14 +254,8 @@ namespace Memoria
             {
                 try
                 {
-                    var pathSafeContentName = string.Join("", CurrentPull.ContentName.Split(Path.GetInvalidFileNameChars()));
-                    var basePath = Path.Combine(Config.PullSaveLocation, pathSafeContentName);
-                    if (!Directory.Exists(basePath))
-                        Directory.CreateDirectory(basePath);
-
-                    var pullName = $"{CurrentPull.PullStartTime.ToShortDateString().Replace("/", "-")} {CurrentPull.PullStartTime.ToString("HH-MM-ss")} - Pull {PullNumber}.json";
-                    var jsonStr = JsonConvert.SerializeObject(CurrentPull, Formatting.Indented);
-                    var fullPath = Path.Combine(basePath, pullName);
+                    var jsonStr = JsonConvert.SerializeObject(CurrentPull, Formatting.Indented, new StringEnumConverter());
+                    var fullPath = GetFileNameForPull("json");
 
                     Plugin.Log.Information($"Saved pull log to {fullPath}");
                     File.WriteAllText(fullPath, jsonStr);
@@ -234,6 +265,50 @@ namespace Memoria
                     Plugin.Log.Error($"Error saving pull log: {ex}");
                 }
             }
+        }
+
+        private string MoveAndRenameRecording(string recPath)
+        {
+            try
+            {
+                var newPath = GetFileNameForPull("mp4");
+                var newPathDir = Path.GetDirectoryName(newPath);
+                if (!Directory.Exists(newPathDir))
+                    Directory.CreateDirectory(newPathDir);
+
+                try
+                {
+                    File.Move(recPath, newPath);
+                }
+                catch (IOException)
+                {
+                    Plugin.Log.Information("MoveAndRenameRecording, failed to move file trying agian in 4 seconds");
+                    // try again, abit later
+                    Task.Delay(TimeSpan.FromSeconds(4)).ContinueWith(t =>
+                    {
+                        Plugin.Log.Information("MoveAndRenameRecording, trying again");
+                        File.Move(recPath, newPath);
+                    });
+                }
+
+                return newPath;
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log.Error($"MoveAndRenameRecording Error: {ex.ToString()}");
+                return recPath;
+            }
+        }
+
+        private string GetFileNameForPull(string ext)
+        {
+            var pathSafeContentName = string.Join("", CurrentPull.ContentName.Split(Path.GetInvalidFileNameChars()));
+            var lockoutStartTime = CurrentPull.LockoutStartTime.ToString("yyyy-MM-dd HH-mm-ss");
+            var pullStartTime = CurrentPull.PullStartTime.ToString("yyyy-MM-dd HH-mm-ss");
+            var pullFileName = $"{pullStartTime} - Pull {CurrentPull.PullNumber}";
+            var fullPath = Path.Combine(Config.PullSaveLocation, pathSafeContentName, lockoutStartTime, $"{pullFileName}.{ext}");
+
+            return fullPath;
         }
     }
 }

@@ -14,7 +14,15 @@ public class Configuration : IPluginConfiguration
 
     public string PullSaveLocation { get; set; } = string.Empty;
     public string OBSUrl { get; set; } = string.Empty;
+    public string OBSHost { get; set; } = "127.0.0.1";
+    public ushort OBSPort { get; set; } = 4455;
     public int DelayAfterPullEndToStopRec = 5;
+
+    public bool RecInNormRaids { get; set; } = false;
+    public bool RecInNormTrials { get; set; } = false;
+    public bool RecInSavageRaids { get; set; } = true;
+    public bool RecInExTrials { get; set; } = true;
+    public bool RecInUltimates { get; set; } = true;
 
     // the below exist just to make saving less cumbersome
     public void Save()

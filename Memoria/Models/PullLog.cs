@@ -15,6 +15,7 @@ namespace Memoria.Models
         public DateTime LockoutStartTime;
         public int PullNumber;
         public string RecordingPath;
+        public PullState PullState = PullState.Unknown;
 
         public List<PartyMember> Party = [];
     }

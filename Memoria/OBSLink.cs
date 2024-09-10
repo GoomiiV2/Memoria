@@ -72,16 +72,27 @@ namespace Memoria
             return null;
         }
 
+        public async Task Reconnect()
+        {
+            try
+            {
+                if (IsConnected)
+                    ObsClient.Disconnect();
+
+                await Connect();
+            }
+            catch (Exception ex)
+            {
+                Plugin.Log.Information($"Reconnect Error: {ex.Message}");
+            }
+        }
+
         private async Task<bool> Connect(bool freshAttempt = false)
         {
             try
             {
                 Plugin.Log.Information("Connect");
-
-                var url = new Uri(configuration.OBSUrl);
-                Plugin.Log.Information($"url.Host: {url.Host}");
-
-                return await ObsClient.ConnectAsync(true, "", url.Host, url.Port);
+                return await ObsClient.ConnectAsync(true, "", configuration.OBSHost, configuration.OBSPort);
             }
             catch (Exception ex)
             {

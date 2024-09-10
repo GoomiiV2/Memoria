@@ -3,6 +3,7 @@ using System.Numerics;
 using Dalamud.Interface.Components;
 using Dalamud.Interface.Windowing;
 using ImGuiNET;
+using ImGuiScene;
 
 namespace Memoria.Windows;
 
@@ -10,17 +11,9 @@ public class ConfigWindow : Window, IDisposable
 {
     private Configuration Configuration;
 
-    // We give this window a constant ID using ###
-    // This allows for labels being dynamic, like "{FPS Counter}fps###XYZ counter window",
-    // and the window ID will always be "###XYZ counter window" for ImGui
-    public ConfigWindow(Plugin plugin) : base("A Wonderful Configuration Window###With a constant ID")
+    public ConfigWindow(Plugin plugin) : base("Memoria Settings")
     {
-        Flags = ImGuiWindowFlags.NoCollapse | ImGuiWindowFlags.NoScrollbar |
-                ImGuiWindowFlags.NoScrollWithMouse;
-
-        Size = new Vector2(500, 90);
-        SizeCondition = ImGuiCond.Once;
-
+        Size = new Vector2(550, 800);
         Configuration = plugin.Configuration;
     }
 
@@ -41,24 +34,6 @@ public class ConfigWindow : Window, IDisposable
 
     public override void Draw()
     {
-        // can't ref a property, so use a local copy
-        var configValue = Configuration.SomePropertyToBeSavedAndWithADefault;
-        if (ImGui.Checkbox("Random Config Bool", ref configValue))
-        {
-            Configuration.SomePropertyToBeSavedAndWithADefault = configValue;
-            // can save immediately on change, if you don't want to provide a "Save and Close" button
-            Configuration.Save();
-        }
-
-        var movable = Configuration.IsConfigWindowMovable;
-        if (ImGui.Checkbox("Movable Config Window", ref movable))
-        {
-            Configuration.IsConfigWindowMovable = movable;
-            Configuration.Save();
-        }
-
-        //ImGui.Text($"Pull Save Location: ");
-        //ImGui.SameLine();
         var pullLoc = Configuration.PullSaveLocation;
         ImGui.SetNextItemWidth(250);
         ImGui.InputText("Pull Save Location##PullSaveLoc", ref pullLoc, 1000, ImGuiInputTextFlags.ReadOnly);
@@ -75,18 +50,93 @@ public class ConfigWindow : Window, IDisposable
             }, Configuration.PullSaveLocation);
         }
 
-        var obsUrl = Configuration.OBSUrl;
+        /*var obsUrl = Configuration.OBSUrl;
         if (ImGui.InputText("OBS Url", ref obsUrl, 1000))
         {
             Configuration.OBSUrl = obsUrl;
             Configuration.Save();
+        }*/
+
+        RenderTitle("OBS Settings");
+
+        var obsHost = Configuration.OBSHost;
+        var obsPort = (int)Configuration.OBSPort;
+        ImGui.SetNextItemWidth(200);
+        var obsSettingsChanged = ImGui.InputText("##OBS Host", ref obsHost, 100);
+        ImGui.SameLine();
+        ImGui.SetNextItemWidth(50);
+        obsSettingsChanged |= ImGui.InputInt("OBS Host and Port", ref obsPort, 0, 0);
+
+        ImGui.Text("OBS Status:");
+        ImGui.SameLine();
+        if (Plugin.OBSLink.IsRecording)
+            ImGui.TextColored(new Vector4(1, 1, 0, 1), "Recording");
+        else if (Plugin.OBSLink.IsConnected)
+            ImGui.TextColored(new Vector4(0, 1, 0, 1), "Connected");
+        else
+            ImGui.TextColored(new Vector4(0.8f, 0.8f, 0.8f, 1), "Disconnected");
+
+        if (obsSettingsChanged &&
+            (obsHost != Configuration.OBSHost || obsPort != Configuration.OBSPort)
+            && !ImGui.IsAnyItemActive())
+        {
+            Configuration.OBSHost = obsHost;
+            Configuration.OBSPort = (ushort)obsPort;
+            Configuration.Save();
+            Plugin.OBSLink.Reconnect();
         }
 
+        ImGui.SetNextItemWidth(260);
         var recEndDelay = Configuration.DelayAfterPullEndToStopRec;
         if (ImGui.SliderInt("Record X seconds after pull", ref recEndDelay, 0, 30) && recEndDelay != Configuration.DelayAfterPullEndToStopRec)
         {
             Configuration.DelayAfterPullEndToStopRec = recEndDelay;
             Configuration.Save();
         }
+
+        ImGui.BeginGroup();
+        if (ImGui.CollapsingHeader("Enabled Contnet"))
+        {
+            var recInNormRaids = Configuration.RecInNormRaids;
+            var hasChanged = ImGui.Checkbox("Normal Raids", ref recInNormRaids);
+            Configuration.RecInNormRaids = recInNormRaids;
+
+            ImGui.SameLine();
+            var recInNormTrials = Configuration.RecInNormTrials;
+            hasChanged |= ImGui.Checkbox("Normal Trials", ref recInNormTrials);
+            Configuration.RecInNormTrials = recInNormTrials;
+
+            ImGui.SameLine();
+            var recInSavageRaids = Configuration.RecInSavageRaids;
+            hasChanged |= ImGui.Checkbox("Savages", ref recInSavageRaids);
+            Configuration.RecInSavageRaids = recInSavageRaids;
+
+            ImGui.SameLine();
+            var recInExTrials = Configuration.RecInExTrials;
+            hasChanged |= ImGui.Checkbox("Exterme Trials", ref recInExTrials);
+            Configuration.RecInExTrials = recInExTrials;
+
+            ImGui.SameLine();
+            var recInUltimates = Configuration.RecInUltimates;
+            hasChanged |= ImGui.Checkbox("Ultimates", ref recInUltimates);
+            Configuration.RecInUltimates = recInUltimates;
+
+            if (hasChanged)
+            {
+                Plugin.Log.Information("Enabled COntent was changed, saving");
+                Configuration.Save();
+            }
+        }
+        ImGui.EndGroup();
+    }
+
+    public static void RenderTitle(string title)
+    {
+        ImDrawListPtr dl = ImGui.GetWindowDrawList();
+        Vector2 cursorScreenPos = ImGui.GetCursorScreenPos();
+        ImGuiStylePtr styles = ImGui.GetStyle();
+        dl.AddRectFilled(cursorScreenPos, cursorScreenPos + new Vector2(ImGui.GetColumnWidth(), 24), ImGui.GetColorU32(ImGuiCol.Header), styles.WindowRounding);
+        dl.AddText(cursorScreenPos + new Vector2(5f, (24f - ImGui.GetTextLineHeight()) / 2), ImGui.GetColorU32(ImGuiCol.Text), title);
+        ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 28);
     }
 }
