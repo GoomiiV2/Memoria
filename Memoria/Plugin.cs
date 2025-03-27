@@ -9,6 +9,7 @@ using System.Collections.Generic;
 using Lumina;
 using Dalamud.Interface.ImGuiFileDialog;
 using Dalamud.Game.ClientState.Objects;
+using FFXIVClientStructs.FFXIV.Client.UI.Misc;
 
 namespace Memoria;
 
@@ -25,6 +26,9 @@ public sealed class Plugin : IDalamudPlugin
     [PluginService] internal static IPartyList PartyList { get; private set; } = null!;
     [PluginService] internal static IAddonLifecycle AddonLifecycle { get; private set; } = null!;
     [PluginService] internal static ICondition Condition { get; private set; } = null!;
+    [PluginService] internal static IGameInventory GameInventory { get; private set; } = null!;
+    [PluginService] internal static IGameInteropProvider GameInteropProvider { get; private set; } = null!;
+    [PluginService] internal static IObjectTable ObjectTable { get; private set; } = null!;
 
     internal static FileDialogManager FileDialogManager = new ();
 

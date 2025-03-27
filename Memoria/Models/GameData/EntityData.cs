@@ -1,20 +1,16 @@
-using Memoria.Models.GameData;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace Memoria.Models
+namespace Memoria.Models.GameData
 {
-    internal class PartyMember
+    public class EntityData
     {
         public string Name;
-        public string World;
-        public string Job;
         public uint MaxHP;
         public uint MaxMP;
         public int Level;
-        public uint EntityId;
     }
 }

@@ -68,6 +68,12 @@ namespace Memoria
             return id;
         }
 
+        public static Lumina.Excel.GeneratedSheets.Item GetItemFromId(uint itemId)
+        {
+            var item = Plugin.DataManager?.GetExcelSheet<Lumina.Excel.GeneratedSheets.Item>().GetRow(itemId);
+            return item;
+        }
+
         public static void DumpContentFinderConditions(string path)
         {
             var sb = new StringBuilder();
