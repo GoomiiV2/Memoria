@@ -1,5 +1,5 @@
 using FFXIVClientStructs.FFXIV.Component.SteamApi.Callbacks;
-using Lumina.Excel.GeneratedSheets;
+using Lumina.Excel.Sheets;
 using Memoria.Models;
 using Newtonsoft.Json;
 using System;
@@ -45,7 +45,7 @@ namespace Memoria
 
         public static ContentFinderCondition? GetContentFinderCondition(ushort territoryId)
         {
-            var content = ContentFinderConditions.FirstOrDefault(row => row.TerritoryType.Row == territoryId);
+            var content = ContentFinderConditions.FirstOrDefault(row => row.TerritoryType.RowId == territoryId);
             return content;
         }
 
@@ -53,7 +53,7 @@ namespace Memoria
         {
             var territoryType = GetTerritory(territoryId ?? Plugin.ClientState.TerritoryType);
             var cfCond        = territoryType?.ContentFinderCondition.Value;
-            var cTypeId       = cfCond?.ContentType.Row;
+            var cTypeId       = cfCond?.ContentType.RowId;
             var isHighEnd     = cfCond?.HighEndDuty;
             var id            = (cTypeId, isHighEnd) switch
             {
@@ -68,10 +68,10 @@ namespace Memoria
             return id;
         }
 
-        public static Lumina.Excel.GeneratedSheets.Item GetItemFromId(uint itemId)
+        public static Lumina.Excel.Sheets.Item? GetItemFromId(uint itemId)
         {
-            var item = Plugin.DataManager?.GetExcelSheet<Lumina.Excel.GeneratedSheets.Item>().GetRow(itemId);
-            return item;
+            var item = Plugin.DataManager?.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRow(itemId);
+            return item ?? null;
         }
 
         public static void DumpContentFinderConditions(string path)
@@ -79,7 +79,7 @@ namespace Memoria
             var sb = new StringBuilder();
             foreach (var condition in ContentFinderConditions)
             {
-                sb.AppendLine($"{condition.Name}, {condition.HighEndDuty}, {condition.ContentType.Value.Name} ({condition.ContentType.Row})");
+                sb.AppendLine($"{condition.Name}, {condition.HighEndDuty}, {condition.ContentType.Value.Name} ({condition.ContentType.RowId})");
             }
 
             File.WriteAllText(path, sb.ToString());
@@ -93,11 +93,11 @@ namespace Memoria
 
         public static void DumpChatChannels(string path)
         {
-            var logKinds = Plugin.DataManager?.GetExcelSheet<Lumina.Excel.GeneratedSheets.LogKind>();
-            var sb = new StringBuilder();
+            var logKinds = Plugin.DataManager?.GetExcelSheet<Lumina.Excel.Sheets.LogKind>();
+            var sb       = new StringBuilder();
             foreach (var logKind in logKinds)
             {
-                sb.AppendLine($"{logKind.RowId} {logKind.Format.RawString}");
+                sb.AppendLine($"{logKind.RowId} {logKind.Format.ToString()}");
             }
 
             File.WriteAllText(path, sb.ToString());

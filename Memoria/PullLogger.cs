@@ -29,7 +29,7 @@ namespace Memoria
         private bool HasCombatStarted = false;
         private bool ShouldRecord = false;
 
-        private static bool EnableHooks = false;
+        private static bool EnableHooks = true;
         private Hook<ActionEffectHandler.Delegates.Receive> ActionEffectHandler_RecvHook;
         private Hook<StatusManager.Delegates.AddStatus> StatusManager_AddStatusHook;
 
@@ -108,17 +108,17 @@ namespace Memoria
         {
             StatusManager_AddStatusHook.Original(thisPtr, statusId, param, u3);
 
-            var status = Plugin.DataManager.GetExcelSheet<Lumina.Excel.GeneratedSheets.Status>()?.GetRow(statusId);
+            var status = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Status>()?.GetRow(statusId);
             Plugin.Log.Information($"Status: {statusId} {status?.Name} {param}");
         }
 
         private unsafe void OnReciveStatusEffect(Character* casterPtr, GameObjectId targetEntityId, ushort statusId, uint actionId)
         {
-            var action = Plugin.DataManager.GetExcelSheet<Lumina.Excel.GeneratedSheets.Action>()?.GetRow(actionId);
-            var status = Plugin.DataManager.GetExcelSheet<Lumina.Excel.GeneratedSheets.Status>()?.GetRow(statusId);
+            var action = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Action>()?.GetRow(actionId);
+            var status = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Status>()?.GetRow(statusId);
             var targetObject = Plugin.ObjectTable.SearchById(targetEntityId);
             var casterGameObj = Plugin.ObjectTable.SearchByEntityId(casterPtr->EntityId);
-            Plugin.Log.Information($"status: {casterPtr->NameString} applies {status?.Name}({statusId}, {status.StatusCategory}) to {targetObject?.Name} (from {action.Name})");
+            Plugin.Log.Information($"status: {casterPtr->NameString} applies {status?.Name}({statusId}, {status.Value.StatusCategory}) to {targetObject?.Name} (from {action.Value.Name})");
 
             TryLogEntity(targetObject);
             TryLogEntity(casterGameObj);
@@ -158,32 +158,32 @@ namespace Memoria
             }
         }
 
-        private void TryLogStatus(Lumina.Excel.GeneratedSheets.Status status)
+        private void TryLogStatus(Lumina.Excel.Sheets.Status? status)
         {
-            if (CurrentPull != null && status != null && !CurrentPull.GameData.Status.ContainsKey((ushort)status.RowId))
+            if (CurrentPull != null && status != null && !CurrentPull.GameData.Status.ContainsKey((ushort)status.Value.RowId))
             {
                 var statusData = new Status()
                 {
-                    Name = status.Name,
-                    Desc = status.Description,
-                    IconId = status.Icon
+                    Name   = status.Value.Name.ExtractText(),
+                    Desc   = status.Value.Description.ExtractText(),
+                    IconId = status.Value.Icon
                 };
 
-                CurrentPull.GameData.Status.Add((ushort)status.RowId, statusData);
+                CurrentPull.GameData.Status.Add((ushort)status.Value.RowId, statusData);
             }
         }
 
-        private void TryLogAction(Lumina.Excel.GeneratedSheets.Action action)
+        private void TryLogAction(Lumina.Excel.Sheets.Action? action)
         {
-            if (CurrentPull != null && action != null && !CurrentPull.GameData.Action.ContainsKey((ushort)action.RowId))
+            if (CurrentPull != null && action != null && !CurrentPull.GameData.Action.ContainsKey((ushort)action.Value.RowId))
             {
                 var actionData = new Models.GameData.Action()
                 {
-                    Name = action.Name,
-                    IconId = action.Icon
+                    Name = action.Value.Name.ExtractText(),
+                    IconId = action.Value.Icon
                 };
 
-                CurrentPull.GameData.Action.Add((ushort)action.RowId, actionData);
+                CurrentPull.GameData.Action.Add((ushort)action.Value.RowId, actionData);
             }
         }
 
@@ -367,8 +367,8 @@ namespace Memoria
 
             CurrentPull = new PullLog()
             {
-                ZoneName = Data.GetTerritory(Plugin.ClientState.TerritoryType)?.PlaceName?.Value?.Name ?? "Unknown",
-                ContentName = Data.GetContentFinderCondition(Plugin.ClientState.TerritoryType)?.Name ?? "Unknown",
+                ZoneName = Data.GetTerritory(Plugin.ClientState.TerritoryType)?.PlaceName.Value.Name.ExtractText() ?? "Unknown",
+                ContentName = Data.GetContentFinderCondition(Plugin.ClientState.TerritoryType)?.Name.ExtractText() ?? "Unknown",
                 PlayerName = Plugin.ClientState.LocalPlayer?.Name?.TextValue ?? "Unknown",
                 PlayerId = $"{Plugin.ClientState.LocalContentId}",
                 PullNumber = ++PullNumber,
@@ -457,9 +457,9 @@ namespace Memoria
                 var member = Plugin.PartyList[i];
                 var partyMember = new PartyMember()
                 {
-                    Name = member?.Name?.TextValue ?? "",
-                    World = member?.World?.GameData?.Name ?? "",
-                    Job = member?.ClassJob?.GameData?.Name ?? "",
+                    Name = member?.Name.TextValue ?? "",
+                    World = member?.World.Value.Name.ExtractText() ?? "",
+                    Job = member?.ClassJob.Value.Name.ExtractText() ?? "",
                     MaxHP = member?.MaxHP ?? 0,
                     MaxMP = member?.MaxMP ?? 0,
                     Level = member?.Level ?? 0,
@@ -491,14 +491,14 @@ namespace Memoria
                 var gearItem = new GearItem()
                 {
                     Id = item.ItemId,
-                    Name = itemInfo.Name,
-                    ILevel = itemInfo.LevelItem.Row
+                    Name = itemInfo?.Name.ExtractText() ?? "??",
+                    ILevel = itemInfo?.LevelItem.RowId ?? 0
                 };
 
                 if (item.ItemId != 0)
                 {
                     numValidIlevelItems++;
-                    combinedIlevel += (int)itemInfo.LevelItem.Row;
+                    combinedIlevel += (int)itemInfo.Value.RowId;
                 }
 
                 CurrentPull.PlayerLoadout.Gear.Add((GearSlotId)i, gearItem);
@@ -509,6 +509,9 @@ namespace Memoria
 
         private void AddTimelineEvent(TimelineEvent timelineEvent)
         {
+            if (CurrentPull == null)
+                return;
+            
             timelineEvent.Time = (DateTime.Now - CurrentPull.PullStartTime).TotalMilliseconds;
 
             CurrentPull.Timeline.Add(timelineEvent);
