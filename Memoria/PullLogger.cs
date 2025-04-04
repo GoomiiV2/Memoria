@@ -12,9 +12,11 @@ using Memoria.Models.GameData;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
 using System;
+using System.Diagnostics;
 using System.IO;
 using System.Numerics;
 using System.Threading.Tasks;
+using Action = Memoria.Models.GameData.Action;
 using Status = Memoria.Models.GameData.Status;
 
 namespace Memoria
@@ -29,7 +31,7 @@ namespace Memoria
         private bool HasCombatStarted = false;
         private bool ShouldRecord = false;
 
-        private static bool EnableHooks = true;
+        private static bool EnableHooks = false;
         private Hook<ActionEffectHandler.Delegates.Receive> ActionEffectHandler_RecvHook;
         private Hook<StatusManager.Delegates.AddStatus> StatusManager_AddStatusHook;
 
@@ -98,7 +100,7 @@ namespace Memoria
                 {
                     for (int eye = 0; eye < header->NumTargets; eye++)
                     {
-                        OnReciveStatusEffect(casterPtr, targetEntityIds[eye], effect.Value, header->ActionId);
+                        OnReceiveStatusEffect(casterPtr, targetEntityIds[eye], effect.Value, header->ActionId);
                     }
                 }
             }
@@ -112,36 +114,44 @@ namespace Memoria
             Plugin.Log.Information($"Status: {statusId} {status?.Name} {param}");
         }
 
-        private unsafe void OnReciveStatusEffect(Character* casterPtr, GameObjectId targetEntityId, ushort statusId, uint actionId)
+        private unsafe void OnReceiveStatusEffect(Character* casterPtr, GameObjectId targetEntityId, ushort statusId, uint actionId)
         {
-            var action = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Action>()?.GetRow(actionId);
-            var status = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Status>()?.GetRow(statusId);
-            var targetObject = Plugin.ObjectTable.SearchById(targetEntityId);
-            var casterGameObj = Plugin.ObjectTable.SearchByEntityId(casterPtr->EntityId);
-            Plugin.Log.Information($"status: {casterPtr->NameString} applies {status?.Name}({statusId}, {status.Value.StatusCategory}) to {targetObject?.Name} (from {action.Value.Name})");
-
-            TryLogEntity(targetObject);
-            TryLogEntity(casterGameObj);
-
-            var targetSnapshot = AddEntitySnapsdshot(targetObject);
-            var castertSanpshot = AddEntitySnapsdshot(casterGameObj);
-
-            TryLogStatus(status);
-            TryLogAction(action);
-
-            var getStatusEvent = new GetStatusEffectEvent()
+            var  sw            = Stopwatch.StartNew();
+            bool isSelfCast    = targetEntityId == casterPtr->EntityId;
+            if (isSelfCast)
             {
-                Caster = casterPtr->EntityId,
-                Target = targetEntityId.ObjectId,
-                Status = statusId,
-                TargetSnapshot = targetSnapshot,
-                CasterSnapshot = castertSanpshot,
-            };
+                var selfObj  = Plugin.ObjectTable.SearchById(targetEntityId);
+                var snapshot = AddEntitySnapshot(selfObj);
+                TryLogEntity(selfObj);
+                TryLogStatus(statusId);
+                TryLogAction(actionId);
 
-            AddTimelineEvent(getStatusEvent);
+                var getStatusEvent = new GetStatusEffectEvent(targetEntityId.ObjectId, statusId, snapshot, actionId);
+                AddTimelineEvent(getStatusEvent);
+            }
+            else
+            {
+                var targetObject  = Plugin.ObjectTable.SearchById(targetEntityId);
+                var casterGameObj = Plugin.ObjectTable.SearchByEntityId(casterPtr->EntityId);
+                ///Plugin.Log.Information($"status: {casterPtr->NameString} applies {status?.Name}({statusId}, {status.Value.StatusCategory}) to {targetObject?.Name} (from {action.Value.Name})");
+
+                TryLogEntity(targetObject);
+                TryLogEntity(casterGameObj);
+                TryLogStatus(statusId);
+                TryLogAction(actionId);
+
+                var targetSnapshot  = AddEntitySnapshot(targetObject);
+                var castertSanpshot = AddEntitySnapshot(casterGameObj);
+                
+                var getStatusEvent = new GetStatusEffectEvent(casterPtr->EntityId, targetEntityId.ObjectId, statusId, targetSnapshot, castertSanpshot, actionId);
+                AddTimelineEvent(getStatusEvent);
+            }
+
+            sw.Stop();
+            Plugin.Log.Information($"OnReciveStatusEffect took: {sw.ElapsedMilliseconds}ms");
         }
 
-        private void TryLogEntity(IGameObject gameObj)
+        private void TryLogEntity(IGameObject? gameObj)
         {
             if (CurrentPull != null && gameObj != null && !CurrentPull.Entities.ContainsKey(gameObj.EntityId))
             {
@@ -158,32 +168,19 @@ namespace Memoria
             }
         }
 
-        private void TryLogStatus(Lumina.Excel.Sheets.Status? status)
+        private void TryLogStatus(ushort statusId)
         {
-            if (CurrentPull != null && status != null && !CurrentPull.GameData.Status.ContainsKey((ushort)status.Value.RowId))
+            if (CurrentPull != null && !CurrentPull.GameData.Status.ContainsKey(statusId))
             {
-                var statusData = new Status()
-                {
-                    Name   = status.Value.Name.ExtractText(),
-                    Desc   = status.Value.Description.ExtractText(),
-                    IconId = status.Value.Icon
-                };
-
-                CurrentPull.GameData.Status.Add((ushort)status.Value.RowId, statusData);
+                CurrentPull.GameData.Status.Add(statusId, new Status());
             }
         }
 
-        private void TryLogAction(Lumina.Excel.Sheets.Action? action)
+        private void TryLogAction(uint actionId)
         {
-            if (CurrentPull != null && action != null && !CurrentPull.GameData.Action.ContainsKey((ushort)action.Value.RowId))
+            if (CurrentPull != null && !CurrentPull.GameData.Action.ContainsKey(actionId))
             {
-                var actionData = new Models.GameData.Action()
-                {
-                    Name = action.Value.Name.ExtractText(),
-                    IconId = action.Value.Icon
-                };
-
-                CurrentPull.GameData.Action.Add((ushort)action.Value.RowId, actionData);
+                CurrentPull.GameData.Action.Add(actionId, new Action());
             }
         }
 
@@ -355,6 +352,8 @@ namespace Memoria
                 }
                 CurrentPull.PullState = pullState;
                 CurrentPull.PullLength = DateTime.Now - CurrentPull.PullStartTime;
+                ResolveLogGameData(CurrentPull);
+                AddPlayerLoadout();
                 SavePullLog();
                 CurrentPull = null;
                 HasCombatStarted = false;
@@ -377,7 +376,6 @@ namespace Memoria
             };
 
             AddPartyToPullLog();
-            AddPlayerLoadout();
         }
 
         private void SavePullLog()
@@ -495,10 +493,10 @@ namespace Memoria
                     ILevel = itemInfo?.LevelItem.RowId ?? 0
                 };
 
-                if (item.ItemId != 0)
+                if (item.ItemId != 0 && gearItem.ILevel > 0)
                 {
                     numValidIlevelItems++;
-                    combinedIlevel += (int)itemInfo.Value.RowId;
+                    combinedIlevel += (int)gearItem.ILevel;
                 }
 
                 CurrentPull.PlayerLoadout.Gear.Add((GearSlotId)i, gearItem);
@@ -517,21 +515,52 @@ namespace Memoria
             CurrentPull.Timeline.Add(timelineEvent);
         }
 
-        private int AddEntitySnapsdshot(uint entityId) => AddEntitySnapsdshot(Plugin.ObjectTable.SearchByEntityId(entityId));
-        private int AddEntitySnapsdshot(IGameObject gameObj)
+        private int AddEntitySnapshot(uint entityId) => AddEntitySnapshot(Plugin.ObjectTable.SearchByEntityId(entityId));
+        private int AddEntitySnapshot(IGameObject? gameObj)
         {
-            var battleChar = gameObj as IBattleChara;
+            if (gameObj == null || gameObj is not IBattleChara battleChar)
+                return -1;
+
             var snapShot = new EntitySnapshot()
             {
-                EntityId = gameObj.EntityId,
+                EntityId = battleChar.EntityId,
                 Hp = battleChar?.CurrentHp ?? 0,
                 Mp = battleChar?.CurrentMp ?? 0,
-                WorldPos = gameObj?.Position ?? Vector3.Zero
+                WorldPos = battleChar?.Position ?? Vector3.Zero
             };
 
             CurrentPull?.EntitySnapshots.Add(snapShot);
 
             return CurrentPull?.EntitySnapshots?.Count - 1 ?? -1;
+        }
+
+        // Go over the log to filling item / action data from ids
+        // Doing it in a post job so as not to cause game hitches with Lumoria lookups
+        private void ResolveLogGameData(PullLog pullLog)
+        {
+            try
+            {
+                var actionsDb = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Action>();
+                foreach (var action in pullLog.GameData.Action)
+                {
+                    var actionData = actionsDb.GetRow(action.Key);
+                    action.Value.Name   = actionData.Name.ExtractText();
+                    action.Value.IconId = actionData.Icon;
+                }
+            
+                var statusesDb = Plugin.DataManager.GetExcelSheet<Lumina.Excel.Sheets.Status>();
+                foreach (var status in pullLog.GameData.Status)
+                {
+                    var statusData = statusesDb.GetRow(status.Key);
+                    status.Value.Name   = statusData.Name.ExtractText();
+                    status.Value.Desc   = statusData.Description.ExtractText();
+                    status.Value.IconId = statusData.Icon;
+                }
+            }
+            catch (Exception e)
+            {
+                Plugin.Log.Error($"ResolveLogGameData Error: {e}");
+            }
         }
 
         // private bool IsBoss(IGameObject chara) => Plugin.DataManager.GetExcelSheet<BNpcBase>()!.GetRow(chara.DataId)?.Rank is 1 or 2 or 6;
