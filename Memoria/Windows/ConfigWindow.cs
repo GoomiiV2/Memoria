@@ -2,7 +2,7 @@ using System;
 using System.Numerics;
 using Dalamud.Interface.Components;
 using Dalamud.Interface.Windowing;
-using ImGuiNET;
+using Dalamud.Bindings.ImGui;
 using ImGuiScene;
 
 namespace Memoria.Windows;

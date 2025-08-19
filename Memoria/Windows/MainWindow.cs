@@ -1,10 +1,10 @@
-﻿using System;
+using System;
 using System.Numerics;
 using Dalamud.Interface.Internal;
 using Dalamud.Interface.Utility;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin.Services;
-using ImGuiNET;
+using Dalamud.Bindings.ImGui;
 
 namespace Memoria.Windows;
 
@@ -47,7 +47,7 @@ public class MainWindow : Window, IDisposable
         if (goatImage != null)
         {
             ImGuiHelpers.ScaledIndent(55f);
-            ImGui.Image(goatImage.ImGuiHandle, new Vector2(goatImage.Width, goatImage.Height));
+            ImGui.Image(goatImage.Handle, new Vector2(goatImage.Width, goatImage.Height));
             ImGuiHelpers.ScaledIndent(-55f);
         }
         else

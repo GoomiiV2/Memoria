@@ -1,13 +1,10 @@
-using FFXIVClientStructs.FFXIV.Component.SteamApi.Callbacks;
+using System.Collections.Frozen;
 using Lumina.Excel.Sheets;
 using Memoria.Models;
-using Newtonsoft.Json;
-using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Text;
-using System.Threading.Tasks;
 
 namespace Memoria
 {
@@ -28,13 +25,27 @@ namespace Memoria
             { "en", "Countdown canceled" }
         };
 
-        public static List<TerritoryType> Territories { get; private set; } = [];
+        public static List<TerritoryType>          Territories             { get; private set; } = [];
         public static List<ContentFinderCondition> ContentFinderConditions { get; private set; } = [];
+        public static HashSet<uint>                IsBoss                  { get; private set; } = [];
 
         public static void Init()
         {
             Territories = Plugin.DataManager?.GetExcelSheet<TerritoryType>()?.ToList() ?? [];
             ContentFinderConditions = Plugin.DataManager?.GetExcelSheet<ContentFinderCondition>()?.ToList() ?? [];
+            BuildBossTable();
+        }
+
+        private static void BuildBossTable()
+        {
+            var bnpcs = Plugin.DataManager?.GetExcelSheet<BNpcBase>();
+            foreach (var bnpc in bnpcs)
+            {
+                if (bnpc.Rank is 1 or 2 or 6)
+                {
+                    IsBoss.Add(bnpc.RowId);
+                }
+            }
         }
 
         public static TerritoryType? GetTerritory(ushort territoryId)
@@ -68,9 +79,9 @@ namespace Memoria
             return id;
         }
 
-        public static Lumina.Excel.Sheets.Item? GetItemFromId(uint itemId)
+        public static Item? GetItemFromId(uint itemId)
         {
-            var item = Plugin.DataManager?.GetExcelSheet<Lumina.Excel.Sheets.Item>().GetRow(itemId);
+            var item = Plugin.DataManager?.GetExcelSheet<Item>().GetRow(itemId);
             return item ?? null;
         }
 

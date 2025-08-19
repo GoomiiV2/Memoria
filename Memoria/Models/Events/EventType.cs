@@ -5,6 +5,7 @@ namespace Memoria.Models.Events
         Undefined,
         PlayerDeath,
         BossDeath,
-        GotStatusEffect
+        GotStatusEffect,
+        CombatStart
     }
 }

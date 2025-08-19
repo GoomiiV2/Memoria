@@ -16,6 +16,7 @@ using System.Diagnostics;
 using System.IO;
 using System.Numerics;
 using System.Threading.Tasks;
+using Dalamud.Bindings.ImGui;
 using Action = Memoria.Models.GameData.Action;
 using Status = Memoria.Models.GameData.Status;
 
@@ -267,8 +268,13 @@ namespace Memoria
             Plugin.Log.Information("OnCombatStart");
             if (CurrentPull == null)
             {
-                PullStart();
+                PullStart().ContinueWith(x =>
+                {
+                    AddTimelineEvent(new CombatStart());
+                });
             }
+            else
+                AddTimelineEvent(new CombatStart());
         }
 
         private void OnCombatEnd()
@@ -298,6 +304,7 @@ namespace Memoria
         private bool ShouldRecordInCurrentDuty()
         {
             var contentId = Data.GetContentTypeIdForZone();
+            Plugin.Log.Info($"contentId: {contentId}");
             if ((contentId == ContentTypeId.Trial && Config.RecInNormTrials) ||
                 (contentId == ContentTypeId.ExTrial && Config.RecInExTrials) ||
                 (contentId == ContentTypeId.Raid && Config.RecInNormRaids) ||
@@ -312,7 +319,7 @@ namespace Memoria
             }
         }
 
-        private async void PullStart()
+        private async Task PullStart()
         {
             if (!ShouldRecord)
                 return;
@@ -350,14 +357,37 @@ namespace Memoria
                 {
                     CurrentPull.RecordingPath = MoveAndRenameRecording(stopRecTask.Result);
                 }
-                CurrentPull.PullState = pullState;
+                CurrentPull.PullState  = pullState;
                 CurrentPull.PullLength = DateTime.Now - CurrentPull.PullStartTime;
+                CurrentPull.BossHPPct  = GetBossHpPct();
                 ResolveLogGameData(CurrentPull);
                 AddPlayerLoadout();
                 SavePullLog();
                 CurrentPull = null;
                 HasCombatStarted = false;
             }
+        }
+
+        private float GetBossHpPct()
+        {
+            try
+            {
+                foreach (var entityId in CurrentPull?.BossEntites ?? [])
+                {
+                    var boss = Plugin.ObjectTable.SearchByEntityId(entityId);
+                    if (boss != null && boss is IBattleChara battleBoss)
+                    {
+                        var hpPct = (battleBoss.CurrentHp / battleBoss.MaxHp) * 100;
+                        return hpPct;
+                    }
+                }
+            }
+            catch (Exception e)
+            {
+                return -1;
+            }
+
+            return -1;
         }
 
         private void StartNewPullLog()
@@ -376,6 +406,8 @@ namespace Memoria
             };
 
             AddPartyToPullLog();
+            AddPlayerLoadout();
+            FindBosses();
         }
 
         private void SavePullLog()
@@ -505,6 +537,21 @@ namespace Memoria
             CurrentPull.PlayerLoadout.ILevel = (int)Math.Round(combinedIlevel / (double)numValidIlevelItems);
         }
 
+        private void FindBosses()
+        {
+            if (CurrentPull == null)
+                return;
+            
+            foreach (var obj in Plugin.ObjectTable)
+            {
+                if (Data.IsBoss.Contains(obj.DataId))
+                {
+                    CurrentPull.BossEntites.Add(obj.EntityId);
+                    TryLogEntity(obj);
+                }
+            }
+        }
+
         private void AddTimelineEvent(TimelineEvent timelineEvent)
         {
             if (CurrentPull == null)
@@ -534,7 +581,7 @@ namespace Memoria
             return CurrentPull?.EntitySnapshots?.Count - 1 ?? -1;
         }
 
-        // Go over the log to filling item / action data from ids
+        //Go over the log to filling item / action data from ids
         // Doing it in a post job so as not to cause game hitches with Lumoria lookups
         private void ResolveLogGameData(PullLog pullLog)
         {
