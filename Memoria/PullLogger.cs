@@ -344,6 +344,11 @@ namespace Memoria
 
             Plugin.Log.Information("PullStop");
 
+            if (CurrentPull != null)
+            {
+                CurrentPull.BossHPPct = GetBossHpPct();
+            }
+
             if (!forceStop)
                 await Task.Delay(TimeSpan.FromSeconds(Config.DelayAfterPullEndToStopRec));
 
@@ -359,7 +364,6 @@ namespace Memoria
                 }
                 CurrentPull.PullState  = pullState;
                 CurrentPull.PullLength = DateTime.Now - CurrentPull.PullStartTime;
-                CurrentPull.BossHPPct  = GetBossHpPct();
                 ResolveLogGameData(CurrentPull);
                 AddPlayerLoadout();
                 SavePullLog();
@@ -372,12 +376,15 @@ namespace Memoria
         {
             try
             {
-                foreach (var entityId in CurrentPull?.BossEntites ?? [])
+                var bosses = CurrentPull?.BossEntites ?? [];
+                for (var i = bosses.Count - 1; i >= 0; i--)
                 {
+                    var entityId = bosses[i];
                     var boss = Plugin.ObjectTable.SearchByEntityId(entityId);
-                    if (boss != null && boss is IBattleChara battleBoss)
+                    if (boss != null && boss is IBattleChara battleBoss && battleBoss.CurrentHp > 0)
                     {
                         var hpPct = (battleBoss.CurrentHp / battleBoss.MaxHp) * 100;
+                        Plugin.Log.Info("Boss {idx} {entityId}: {hpPct}", i, entityId, hpPct);
                         return hpPct;
                     }
                 }
